@@ -15,6 +15,7 @@ module World
 import Control.Exception.Base
 import Data.Array
 import Entity
+import qualified Entity (render)
 import Data.List (intersperse)
 
 -- An index to a point in the world.
@@ -53,6 +54,7 @@ chunkConst (x,y) size slot = array ((x,y), (x+size-1,y+size-1))
     Eventually, this will need a way of incorporating inputs / commands /
     actions or whatever ...
     --}
+
 -- nextState :: Chunk -> Chunk
 -- nextState = 10
 
@@ -62,7 +64,7 @@ nextStateMin = undefined
 
 slotRender :: Slot -> Char
 slotRender Wall = 'W'
-slotRender (Space _) = ' '
+slotRender (Space (ent:ents)) = Entity.render ent
 
 intersperseK :: a -> [a] -> Int -> [a]
 intersperseK x xs k = let
@@ -78,3 +80,6 @@ chunkRender chunk = let
   n = chunkSize chunk
   slots = elems $ fmap slotRender chunk in
   (intersperseK '\n' (intersperse ' ' slots) (2*n))
+
+-- Is there an observer at this chunk/index?
+-- observerAt chunk wix = or (
