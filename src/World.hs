@@ -9,11 +9,13 @@ module World
   , chunkBounds
   , chunkConst
   , nextStateMin
+  , chunkRender
   ) where
 
 import Control.Exception.Base
 import Data.Array
 import Entity
+import Data.List (intersperse)
 
 -- An index to a point in the world.
 type WIx = (Int, Int)
@@ -57,3 +59,22 @@ chunkConst (x,y) size slot = array ((x,y), (x+size-1,y+size-1))
 -- The minimal case (for a 3x3 chunk)
 nextStateMin :: Chunk -> Slot
 nextStateMin = undefined
+
+slotRender :: Slot -> Char
+slotRender Wall = 'W'
+slotRender (Space _) = ' '
+
+intersperseK :: a -> [a] -> Int -> [a]
+intersperseK x xs k = let
+  (as,bs) = splitAt k xs
+  na = length bs in
+  case compare na 0 of
+    EQ -> as
+    otherwise -> (as ++ [x]) ++ (intersperseK x bs k)
+
+-- Render a chunk to ASCII.
+chunkRender :: Chunk -> String
+chunkRender chunk = let
+  n = chunkSize chunk
+  slots = elems $ fmap slotRender chunk in
+  (intersperseK '\n' (intersperse ' ' slots) (2*n))
