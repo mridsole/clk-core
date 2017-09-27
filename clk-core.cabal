@@ -24,6 +24,7 @@ library
                      , derive
   default-language:    Haskell2010
 
+-- ???
 executable clk-core-exe
   hs-source-dirs:      app
   main-is:             Main.hs
@@ -32,12 +33,30 @@ executable clk-core-exe
                      , clk-core
   default-language:    Haskell2010
 
-executable clk-viewer-exe
-  hs-source-dirs:      viewer 
+-- Just ASCII render for now
+-- executable clk-viewer-exe
+--   hs-source-dirs:      viewer 
+--   main-is:             Main.hs
+--   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
+--   build-depends:       base
+--                      , clk-core
+--   default-language:    Haskell2010
+
+-- Basic webserver for testing
+executable clk-server-exe
+  hs-source-dirs:      server
   main-is:             Main.hs
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   build-depends:       base
                      , clk-core
+                     , warp
+                     , aeson
+                     , text
+                     , bytestring
+                     , wai
+                     , aeson-pretty
+                     , http-types
+                     , wai-extra
   default-language:    Haskell2010
 
 test-suite clk-core-test

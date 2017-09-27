@@ -7,6 +7,9 @@ import Data.DeriveTH
 
 type EntityID = Int
 
+-- TODO: Move this elsewhere.
+type PlayerID = Int
+
 data BlinkerState = On | Off
   deriving (Show)
 
@@ -17,15 +20,16 @@ data EntityType =
 
 data Entity = Entity {
   entityID :: EntityID,
+  ownerID :: PlayerID,
   entityType :: EntityType
   } deriving (Show)
 
 -- Render an entity.
 -- TODO: submodule for ASCII rendering?
 render :: Entity -> Char
-render (Entity _ Observer) = 'O'
-render (Entity _ (Blinker On)) = '/'
-render (Entity _ (Blinker Off)) = '\\'
+render (Entity _ _ Observer) = 'O'
+render (Entity _ _ (Blinker On)) = '/'
+render (Entity _ _ (Blinker Off)) = '\\'
 
 -- um
 

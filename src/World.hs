@@ -6,9 +6,9 @@ module World
   , Chunk
   , ChunkBounds (..)
   , chunkSize
-  , chunkBounds
+  -- , chunkBounds
   , chunkConst
-  , nextStateMin
+  , nextStateMinor
   , chunkRender
   ) where
 
@@ -30,9 +30,10 @@ data Slot =
 -- A square subset of the world.
 type Chunk = Array WIx Slot
 
--- Describes the top left corner and the size of the chunk.
-data ChunkBounds = ChunkBounds WIx Int
-  deriving (Show, Eq)
+-- etc
+type ChunkBounds = (WIx, WIx)
+
+type CoordMap = Array WIx WIx
 
 -- Get the size of a chunk.
 chunkSize :: Chunk -> Int
@@ -41,9 +42,9 @@ chunkSize chunk = let ((ax,ay),(bx,by)) = bounds chunk in
     then abs (ax - bx) + 1
     else throw $ ErrorCall "Chunks must be square"
 
-chunkBounds :: Chunk -> ChunkBounds
-chunkBounds chunk = let ((ax,ay), (bx,by)) = bounds chunk in
-  ChunkBounds (ax,ay) $ chunkSize chunk
+-- chunkBounds :: Chunk -> ChunkBounds
+-- chunkBounds chunk = let ((ax,ay), (bx,by)) = bounds chunk in
+--   ChunkBounds (ax,ay) $ chunkSize chunk
 
 -- Chunk filled will a constant slot.
 chunkConst :: WIx -> Int -> Slot -> Chunk
@@ -59,8 +60,8 @@ chunkConst (x,y) size slot = array ((x,y), (x+size-1,y+size-1))
 -- nextState = 10
 
 -- The minimal case (for a 3x3 chunk)
-nextStateMin :: Chunk -> Slot
-nextStateMin = undefined
+-- nextStateMin :: Chunk -> Slot
+-- nextStateMin = undefined
 
 slotRender :: Slot -> Char
 slotRender Wall = 'W'
@@ -83,3 +84,39 @@ chunkRender chunk = let
 
 -- Is there an observer at this chunk/index?
 -- observerAt chunk wix = or (
+
+-- Run a minor tick state update.
+nextStateMinor :: Chunk -> Chunk
+nextStateMinor chunk = fmap nextStateMinor3 $ neighbourhoods chunk
+
+nextStateMinor3 :: Chunk -> Slot
+nextStateMinor3 chunk = assert (chunkSize chunk == 3) $ let
+  ((ax,ay),_) = bounds chunk
+  midslot = chunk ! (ax+1,ay+1) in
+  case midslot of
+    Space ((Entity a b (Blinker Off)):xs) -> Space (Entity a b (Blinker On):xs)
+    Space ((Entity a b (Blinker On)):xs) -> Space (Entity a b (Blinker Off):xs)
+    otherwise -> midslot
+
+neighbourhood :: WIx -> Chunk -> Chunk
+neighbourhood at chunk = assert (at `inInterior` bounds chunk) $
+  let (x,y) = at in
+  ixmap ((x-1,y-1),(x+1,y+1)) id chunk
+  where
+  (x,y) `inInterior` ((ax,ay),(bx,by)) =
+    (x > ax && x < bx) && (y > ay && y < by)
+
+interiorBounds :: Chunk -> ChunkBounds
+interiorBounds chunk = let ((ax,ay),(bx,by)) = bounds chunk in
+  ((ax+1,ay+1),(bx-1,by-1))
+
+interior :: Chunk -> Chunk
+interior chunk = assert (chunkSize chunk >= 3) $
+  ixmap (interiorBounds chunk) id chunk
+
+coordMap :: ChunkBounds -> CoordMap
+coordMap ((ax,ay),(bx,by)) = assert (ax <= bx && ay <= by) $
+  array ((ax,ay),(bx,by)) [((i,j),(i,j)) | i <- [ax..bx], j <- [ay..by]]
+
+neighbourhoods chunk = fmap (flip neighbourhood chunk) $
+  coordMap $ interiorBounds chunk
