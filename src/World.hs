@@ -87,7 +87,7 @@ chunkRender chunk = let
 
 -- Run a minor tick state update.
 nextStateMinor :: Chunk -> Chunk
-nextStateMinor chunk = fmap nextStateMinor3 $ neighbourhoods chunk
+nextStateMinor = fmap nextStateMinor3 . neighbourhoods
 
 nextStateMinor3 :: Chunk -> Slot
 nextStateMinor3 chunk = assert (chunkSize chunk == 3) $ let
@@ -120,3 +120,10 @@ coordMap ((ax,ay),(bx,by)) = assert (ax <= bx && ay <= by) $
 
 neighbourhoods chunk = fmap (flip neighbourhood chunk) $
   coordMap $ interiorBounds chunk
+
+-- Surround a chunk with walls.
+boundChunk :: Chunk -> Chunk
+boundChunk chunk = let
+  n = chunkSize chunk
+  ((ax,ay),(bx,by)) = bounds chunk in
+  chunkConst (ax - 1,ay - 1) (n + 2) Wall // assocs chunk
