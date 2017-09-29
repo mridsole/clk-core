@@ -1,56 +1,106 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Main where
 
-import GHC.Generics
-import Data.ByteString.Lazy.Char8 (pack)
-import Data.ByteString.Char8 (unpack)
-import Network.Wai (requestBody, requestMethod, responseLBS,
-                    Application, Request(..), Middleware)
-import Network.Wai.Handler.Warp (run)
-import Network.Wai.Middleware.RequestLogger (logStdout)
-import Network.HTTP.Types (status200, HttpVersion(..))
-import Network.HTTP.Types.Header (hContentType)
-import Data.Aeson (decode, Value, ToJSON(..), object, (.=))
-import qualified Data.Aeson as Aeson (Value(..))
-import Data.Aeson.Encode.Pretty (encodePretty, Indent(..))
-import Data.Maybe (fromJust)
-import qualified Data.Text as Text (pack)
+import qualified World
+import qualified World.Entity as Entity
+import qualified Data.Text as T
+import Control.Concurrent (MVar, newMVar, putMVar, takeMVar,
+  newEmptyMVar, modifyMVar_, modifyMVar, readMVar, threadDelay, forkIO)
+import Control.Exception (finally)
+import qualified Control.Exception as E
+-- import Control.Concurrent.STM
+import qualified Network.WebSockets as WS
+import qualified System.Microtimer as MTimer
+import Data.Array
 
-import Lib
+-- Representation of a client connected to us - they're more than just the
+-- connection.
+type Client = (T.Text, WS.Connection)
+
+-- State of the server is a list of clients.
+-- type ServerState = (Chunk, [Client])
+
+-- counter :: ServerState -> Int
+-- counter sState = fst sState
+
+-- `fastest`: Minimum time difference between IO actions.
+throttle :: Double -> [IO a] -> IO [a]
+throttle fastest actions = throttle_ fastest actions [] where
+  throttle_ :: Double -> [IO a] -> [a] -> IO [a]
+  throttle_ fastest [] results = return results
+  throttle_ fastest (action:actions) results = do
+    (elapsed, x) <- MTimer.time action
+    threadDelay $ round $ max (1000000 * (fastest - elapsed)) 0.0
+    throttle_ fastest actions (x:results)
 
 main :: IO ()
 main = do
-  let port = 3000
-  putStrLn $ "Server listening on port " ++ show port
-  run port (logAllMiddleware $ logStdout app)
 
-app :: Application
-app req f =
-  f $ responseLBS status200 [(hContentType, "text/plain")] (encodePretty $ req)
+  let initialChunk = (World.chunkConst (1,1) 100 World.Wall) //
+        [((2,2), World.Space [Entity.Entity 1 1 $ Entity.Blinker Entity.On])]
 
--- "Application is just a handler: "
--- type Application = Request -> (Response -> IO ResponseReceived) -> IO ResponseReceived
+  -- The state computing buffer - where the most recently computed state is stored.
+  stateComputing <- newMVar initialChunk;
 
--- Pretty prints the entire HTTP request.
-logAllMiddleware :: Middleware
-logAllMiddleware app req respond = do
-  -- It's not even JSON bro
-  print $ show req
-  -- print $ encodePretty $ fromJust (decode $ pack $ show req :: Maybe Value)
-  app req respond
+  -- The state broadcast buffer - full after the thing has been computed.
+  stateBroadcast <- newEmptyMVar :: IO (MVar World.Chunk)
 
--- TODO: finish this ...
-instance ToJSON Request where
-  toJSON req =
-    object [
-      "requestMethod" .= (unpack $ requestMethod req),
-      "httpVersion" .= (toJSON $ httpVersion req),
-      "rawPathInfo" .= (unpack $ rawPathInfo req),
-      "rawQueryString" .= (unpack $ rawQueryString req)
-    ]
+  -- Compute the next local state, writing to the broadcast buffer, and waiting
+  -- until the buffer is available to write.
 
-instance ToJSON HttpVersion where
-  toJSON = Aeson.String . Text.pack . show
+  -- IO Action that computes the next state and updates the buffers.
+  let stateStep = do {
+
+    -- Compute the next state.
+    putStrLn "Computing next state ...";
+    newState <- modifyMVar stateComputing $ return . (\x -> (x,x)) .
+      World.boundChunk . World.nextStateMinor;
+
+    -- Update the broadcast buffer, waiting for it to be empty.
+    putStrLn "Waiting for the broadcast buffer to be empty ...";
+    putMVar stateBroadcast newState;
+  }
+
+  -- Run the compute loop in a separate thread.
+  -- forkIO $ throttle 1.0 $ repeat $ stateStep
+  computeThreadId <- forkIO $ do { throttle 1.0 $ repeat $ stateStep; return () }
+
+  -- Run the WebSocket server in this thread (this will spawn it's own
+  -- application threads - one for each connection).
+  WS.runServer "127.0.0.1" 9160 $ application stateBroadcast
+
+-- Equivalently, :: MVar ServerState -> WS.PendingConnection -> IO ()
+-- or            :: MVar ServerState -> (WS.PendingConnection -> IO ())
+application :: MVar World.Chunk -> WS.ServerApp
+application worldState pending = do
+
+  -- Accept the connection (TODO: authentication)
+  conn <- WS.acceptRequest pending
+
+  -- Keep the WebSocket connection alive by pinging every 30 seconds (this
+  -- doesn't interfere with messaging - just ensures the connection doesn't
+  -- drop when using proxies and whatever)
+  WS.forkPingThread conn 30
+
+  let loop = do {
+
+    -- Wait for any message
+    msg <- WS.receiveData conn :: IO T.Text;
+
+    -- Read the world state from the broadcast buffer - if it isn't ready, wait for it.
+    chunk <- takeMVar worldState;
+
+    -- Render it and send it.
+    WS.sendTextData conn $ T.pack $ World.chunkRender chunk;
+
+    -- Keep looping.
+    loop;
+  }
+
+  -- Run the loop, handling when a client disconnects.
+  flip finally disconnect loop where
+    disconnect = do { putStrLn "bye"; }

@@ -17,10 +17,9 @@ library
   hs-source-dirs:      src
   exposed-modules:     Lib
                      , World
-                     , Entity
+                     , World.Entity
   build-depends:       base >= 4.7 && < 5
                      , array
-                     , brick
                      , derive
   default-language:    Haskell2010
 
@@ -57,6 +56,12 @@ executable clk-server-exe
                      , aeson-pretty
                      , http-types
                      , wai-extra
+                     , websockets
+                     , stm
+                     , microtimer
+                     , array
+                     , io-throttle
+                     , ListZipper
   default-language:    Haskell2010
 
 test-suite clk-core-test

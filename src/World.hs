@@ -10,12 +10,13 @@ module World
   , chunkConst
   , nextStateMinor
   , chunkRender
+  , boundChunk
   ) where
 
 import Control.Exception.Base
 import Data.Array
-import Entity
-import qualified Entity (render)
+import World.Entity hiding (render)
+import qualified World.Entity as Entity (render)
 import Data.List (intersperse)
 
 -- An index to a point in the world.

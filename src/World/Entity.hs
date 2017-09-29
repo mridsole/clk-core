@@ -1,6 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 
-module Entity where
+module World.Entity where
 --import qualified Entity.Generated
 
 import Data.DeriveTH
